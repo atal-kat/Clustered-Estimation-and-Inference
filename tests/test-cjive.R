@@ -151,4 +151,41 @@ ok(errs(cjive(y, x, judge, cluster = replace(cl, 1, NA))), "stops on NA in clust
 ok(errs(cjive(y, x, factor(cl), cluster = cl)),
    "stops when each instrument group lies in a single cluster")
 
+# === Test 9: agreement with FLM/McIntyre Stata `cjive` =====================
+# Literal translation of the Mata core (leverage trick + ivregress 2sls,
+# noconstant, vce(cluster)). The point estimate is exact; the SE matches because
+# covariates are partialled out, so the final model has K = 1 parameter and
+# Stata's q_c = (N-1)/(N-K) * G/(G-1) reduces to G/(G-1).
+stata_cjive_ref <- function(y, d, Z, Wexog, cluster) {
+  N <- length(y)
+  Cx <- if (is.null(Wexog)) matrix(1, N, 1L) else cbind(1, Wexog)
+  rr <- function(v) v - Cx %*% solve(crossprod(Cx), crossprod(Cx, v))
+  yres <- as.numeric(rr(y)); dres <- as.numeric(rr(d))
+  Zres <- apply(Z, 2, function(z) as.numeric(rr(z)))
+  ZTZI <- solve(crossprod(Zres))
+  Pi <- ZTZI %*% crossprod(Zres, dres)
+  Lev <- numeric(N)
+  for (g in unique(cluster)) {
+    ix <- which(cluster == g); ng <- length(ix)
+    AZC <- Zres[ix, , drop = FALSE]
+    AHC <- AZC %*% ZTZI %*% t(AZC)
+    A <- AZC %*% Pi - AHC %*% dres[ix]
+    Lev[ix] <- solve(diag(ng) - AHC) %*% A
+  }
+  beta <- sum(Lev * yres) / sum(Lev * dres)
+  S <- tapply(Lev * (yres - beta * dres), cluster, sum)
+  M <- length(unique(cluster))
+  se <- sqrt((M / (M - 1)) * sum(S^2)) / abs(sum(Lev * dres))
+  list(beta = beta, se = se)
+}
+
+set.seed(99)
+Wq <- cbind(rnorm(n), rnorm(n))                  # exogenous covariates
+dq <- as.numeric(judge) + Wq %*% c(.4, -.3) + ucl + rnorm(n)
+yq <- 1.3 * dq + Wq %*% c(1, 1) + ucl + rnorm(n)
+ref <- stata_cjive_ref(yq, dq, model.matrix(~judge)[, -1, drop = FALSE], Wq, cl)
+fitq <- cjive(yq, dq, judge, cluster = cl, controls = Wq)
+ok(near(fitq$coefficient, ref$beta, 1e-10) && near(fitq$se, ref$se, 1e-10),
+   "matches FLM Stata cjive (coefficient and SE, 1e-10)")
+
 cat("\nAll clusterIV tests passed.\n")
