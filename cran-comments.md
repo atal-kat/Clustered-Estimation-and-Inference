@@ -8,15 +8,17 @@ This is a new submission of the `clusterIV` package.
 
 * This is a new submission.
 
-(Update the numbers above with the actual win-builder / R-hub results before
-submitting.)
+(The win-builder result is pending; confirm the line above matches the emailed
+R-devel and R-release reports before submitting.)
 
 ## Test environments
 
-* local: Ubuntu 24.04, R 4.3.3
+* local: macOS (darwin), R 4.3.2 -- 0 errors, 0 warnings, only the New
+  submission note (the PDF-manual and HTML-validation notes seen locally are
+  environmental: no LaTeX / outdated HTML tidy on this machine)
 * GitHub Actions: ubuntu-latest (R-devel, R-release, R-oldrel-1),
   macOS-latest (R-release), windows-latest (R-release)
-* win-builder: R-devel and R-release   <!-- run devtools::check_win_*() -->
+* win-builder: R-devel and R-release (submitted)
 
 ## Notes for the reviewer
 
