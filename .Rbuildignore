@@ -1,5 +1,6 @@
 ^cran-comments\.md$
 ^\.github$
 ^\.git$
+^\.claude$
 ^.*\.Rproj$
 ^\.Rproj\.user$
