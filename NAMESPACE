@@ -1,0 +1,20 @@
+# Generated from roxygen2 tags.
+
+export(cjive)
+export(iv_compare)
+
+S3method(cjive, default)
+S3method(cjive, formula)
+S3method(print, cjive)
+S3method(summary, cjive)
+S3method(print, summary.cjive)
+S3method(coef, cjive)
+S3method(vcov, cjive)
+S3method(confint, cjive)
+
+importFrom(stats, lm.fit)
+importFrom(stats, model.matrix)
+importFrom(stats, pnorm)
+importFrom(stats, printCoefmat)
+importFrom(stats, qnorm)
+importFrom(stats, reformulate)
