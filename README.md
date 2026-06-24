@@ -1,11 +1,13 @@
-# cjive
+# clusterIV
 
-**Cluster-jackknife instrumental variables estimation for R.**
+**Clustered instrumental variables estimation and inference for R.**
 
-`cjive` computes the cluster-jackknife IV estimator (CJIVE) of Frandsen, Leslie
-and McIntyre (2025) for a single endogenous regressor in a just-identified
-design — the judge/examiner and shift-share settings where the instrument is
-many and the errors are clustered. Each observation's first-stage value is
+`clusterIV` is a home for instrumental-variables methods that stay valid under
+clustered errors with many instruments. The current release provides `cjive()`,
+the cluster-jackknife IV estimator (CJIVE) of Frandsen, Leslie and McIntyre
+(2025) for a single endogenous regressor in a just-identified design — the
+judge/examiner and shift-share settings where the instrument is many and the
+errors are clustered. Each observation's first-stage value is
 fitted from a regression that leaves out the observation's *entire cluster*,
 which annihilates the within-cluster dependence that otherwise reintroduces the
 many-instrument bias of two-stage least squares. The leave-cluster-out fits are
@@ -18,7 +20,7 @@ estimator runs comfortably on samples in the hundreds of thousands. Base R only
 
 ```r
 # install.packages("remotes")
-remotes::install_github("atal-kat/clustered-estimation-and-inference")
+remotes::install_github("atal-kat/Clustered-Estimation-and-Inference")
 ```
 
 ## Usage
@@ -27,7 +29,7 @@ Formula interface, `y ~ x | z` (the bar separates the endogenous regressor from
 the instruments); a factor on the instrument side is a judge design:
 
 ```r
-library(cjive)
+library(clusterIV)
 fit <- cjive(wage ~ incarcerated | judge_id, data = cases, cluster = ~courtroom)
 summary(fit)
 ```

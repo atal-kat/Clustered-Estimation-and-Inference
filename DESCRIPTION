@@ -1,20 +1,21 @@
-Package: cjive
-Title: Cluster-Jackknife Instrumental Variables Estimation
+Package: clusterIV
+Title: Clustered Jackknife Instrumental Variables Estimation
 Version: 0.1.0
 Authors@R:
     person("Atal", "Katawazi", email = "atalkatawazi@hotmail.com",
            role = c("aut", "cre"))
-Description: Computes the cluster-jackknife instrumental variables estimator
-    (CJIVE) of Frandsen, Leslie and McIntyre (2025) for a single endogenous
-    regressor in a just-identified design, with cluster-robust inference. Each
-    observation's first-stage value is fitted leaving out its entire cluster,
-    which removes
-    the many-instrument bias that survives clustering. The leave-cluster-out
-    fits are computed by an exact Woodbury block update -- one factorisation of
-    the instrument Gram matrix plus a small solve per cluster -- so the
-    estimator scales to large samples. A companion 'iv_compare()' reports OLS,
-    two-stage least squares, the observation-level jackknife and CJIVE on a
-    common cluster-robust standard error.
+Description: Tools for instrumental variables estimation and inference under
+    clustered errors with many instruments. The current release provides the
+    cluster-jackknife IV estimator (CJIVE) of Frandsen, Leslie and McIntyre
+    (2025) for a single endogenous regressor in a just-identified design, with
+    cluster-robust inference: each observation's first-stage value is fitted
+    leaving out its entire cluster, which removes the many-instrument bias that
+    survives clustering. The leave-cluster-out fits use an exact Woodbury block
+    update -- one factorisation of the instrument Gram matrix plus a small solve
+    per cluster -- so the estimator scales to large samples. A companion
+    'iv_compare()' reports ordinary least squares, two-stage least squares, the
+    observation-level jackknife and CJIVE on a common cluster-robust standard
+    error.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Imports: stats

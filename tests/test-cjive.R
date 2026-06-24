@@ -1,8 +1,8 @@
-# Correctness tests for the cjive package (base R, no testthat).
+# Correctness tests for the clusterIV package (base R, no testthat).
 # Each block stops with an informative message on failure, so a failure fails
 # `R CMD check`.
 
-library(cjive)
+library(clusterIV)
 
 ok <- function(cond, msg) {
   if (!isTRUE(cond)) stop("FAILED: ", msg, call. = FALSE)
@@ -28,7 +28,7 @@ yc <- 1.0 * xc + ucl + rnorm(n)
 # Residualised (intercept-only) quantities for the judge design, via the same
 # front end the package uses.
 Zj <- stats::model.matrix(~judge)[, -1L, drop = FALSE]
-po <- cjive:::.partial_out(y, x, Zj, controls = NULL, weights = NULL, intercept = TRUE)
+po <- clusterIV:::.partial_out(y, x, Zj, controls = NULL, weights = NULL, intercept = TRUE)
 yr <- po$y; xr <- po$x; Zr <- po$Z
 groups <- split(seq_len(n), factor(cl))
 
@@ -45,8 +45,8 @@ brute_cjive <- function(D, Z, groups) {
 }
 
 # === Test 1: dense CJIVE == brute-force FLM definition ======================
-fs <- cjive:::.first_stage(xr, Zr)
-phat_pkg <- cjive:::.leaveout_fit(xr, Zr, groups, fs)$phat
+fs <- clusterIV:::.first_stage(xr, Zr)
+phat_pkg <- clusterIV:::.leaveout_fit(xr, Zr, groups, fs)$phat
 phat_bf <- brute_cjive(xr, Zr, groups)
 ok(near(phat_pkg, phat_bf, 1e-8), "dense CJIVE p-hat vector == brute force (1e-8)")
 
@@ -56,8 +56,8 @@ ok(near(beta_pkg, beta_bf, 1e-8), "dense CJIVE coefficient == brute force (1e-8)
 
 # === Test 2: singleton clusters: CJIVE == JIVE =============================
 sing <- split(seq_len(n), factor(seq_len(n)))
-phat_sing <- cjive:::.leaveout_fit(xr, Zr, sing, fs)$phat
-phat_jive <- cjive:::.phat_jive(fs, xr)
+phat_sing <- clusterIV:::.leaveout_fit(xr, Zr, sing, fs)$phat
+phat_jive <- clusterIV:::.phat_jive(fs, xr)
 ok(near(phat_sing, phat_jive, 1e-8), "singleton-cluster CJIVE == JIVE (1e-8)")
 
 # === Test 3: cjive() default == iv_compare() CJIVE row =====================
@@ -75,7 +75,7 @@ brute_mean <- function(x, group, cluster) {
     mean(x[sel])
   }, numeric(1))
 }
-phat_mean_pkg <- cjive:::.leaveout_mean(x, judge, cl, weights = NULL)
+phat_mean_pkg <- clusterIV:::.leaveout_mean(x, judge, cl, weights = NULL)
 phat_mean_bf <- brute_mean(x, judge, cl)
 ok(near(phat_mean_pkg, phat_mean_bf, 1e-8),
    "leaveout_mean p-hat == brute-force group mean (1e-8)")
@@ -107,7 +107,7 @@ tab6 <- iv_compare(yc, xc, Zc, cluster = cl)
 ok(identical(tab6$estimator, c("OLS", "2SLS", "JIVE", "CJIVE")),
    "iv_compare returns the four estimators in order")
 # Hand OLS on residualised (FWL) data: slope of yr on xr.
-poc <- cjive:::.partial_out(yc, xc, Zc, NULL, NULL, TRUE)
+poc <- clusterIV:::.partial_out(yc, xc, Zc, NULL, NULL, TRUE)
 ols_hand <- sum(poc$x * poc$y) / sum(poc$x * poc$x)
 ok(near(tab6$coefficient[1], ols_hand, 1e-10), "iv_compare OLS row == hand OLS (1e-10)")
 
@@ -151,4 +151,4 @@ ok(errs(cjive(y, x, judge, cluster = replace(cl, 1, NA))), "stops on NA in clust
 ok(errs(cjive(y, x, factor(cl), cluster = cl)),
    "stops when each instrument group lies in a single cluster")
 
-cat("\nAll cjive tests passed.\n")
+cat("\nAll clusterIV tests passed.\n")
