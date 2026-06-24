@@ -39,8 +39,7 @@ iv_compare <- function(y, x, z, cluster, controls = NULL, weights = NULL,
   d <- .prep_data(y, x, z, cluster, controls, weights, intercept)
   fs <- .first_stage(d$x, d$Z)
 
-  # Each estimator is just a constructed instrument; the inference is shared.
-  # Keyed list so further estimators can be appended without touching assembly.
+  # Each estimator differs only in the constructed instrument.
   phats <- list(
     OLS   = d$x,
     `2SLS` = .phat_2sls(fs),

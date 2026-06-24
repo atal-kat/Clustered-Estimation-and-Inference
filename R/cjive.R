@@ -90,8 +90,7 @@ cjive.default <- function(y, x, z, cluster, controls = NULL, weights = NULL,
       stop("method = \"leaveout_mean\" requires intercept-only controls.", call. = FALSE)
 
     phat <- .leaveout_mean(x, d$group, cluster, weights)
-    # Inference in the same weighted, centred geometry as the dense route:
-    # residualise outcome, regressor and constructed instrument on the intercept.
+    # Centre y, x and p-hat (residualise on the intercept) to match the dense route.
     po <- .partial_out(as.numeric(y), as.numeric(x), phat,
                        controls = NULL, weights = weights, intercept = intercept)
     inf <- .iv_inference(as.numeric(po$Z), po$x, po$y, d$cluster, level)
@@ -133,12 +132,7 @@ cjive.formula <- function(formula, data, cluster, controls = NULL,
   out
 }
 
-# --- formula helpers -------------------------------------------------------
-
-# Parse `y ~ x | z1 + z2` in base R: the LHS is the outcome, the part of the RHS
-# left of `|` the single endogenous regressor, the part to its right the
-# instruments.  Factors among the instruments expand to dummies (reference
-# dropped); the intercept is partialled out downstream.
+# Split `y ~ x | z` into outcome, endogenous regressor and instrument matrix.
 .parse_iv_formula <- function(formula, data) {
   if (!inherits(formula, "formula") || length(formula) != 3L)
     stop("`formula` must be two-sided, of the form y ~ x | z.", call. = FALSE)
