@@ -170,6 +170,16 @@
   list(Z = Z, grouping = FALSE, group = NULL)
 }
 
+# Reject missing or non-finite values up front, with a message that names the
+# offending argument -- otherwise NAs surface as a cryptic LS failure, or (for
+# the cluster id) are silently dropped from the partition while still counted
+# in n, returning a quietly wrong estimate.
+.assert_finite <- function(v, name) {
+  if (anyNA(v) || any(!is.finite(v)))
+    stop(sprintf("`%s` contains missing or non-finite values; remove or impute them first.",
+                 name), call. = FALSE)
+}
+
 # Shared preparation: validate, expand z, partial out, build the cluster
 # partition.  Used by both cjive() and iv_compare() so they cannot diverge.
 .prep_data <- function(y, x, z, cluster, controls, weights, intercept) {
@@ -179,6 +189,9 @@
 
   if (length(x) != n) stop("`x` and `y` must have the same length.", call. = FALSE)
   if (length(cluster) != n) stop("`cluster` must have length n.", call. = FALSE)
+  .assert_finite(y, "y")
+  .assert_finite(x, "x")
+  if (anyNA(cluster)) stop("`cluster` contains missing values.", call. = FALSE)
   if (!is.null(weights)) {
     weights <- as.numeric(weights)
     if (length(weights) != n) stop("`weights` must have length n.", call. = FALSE)
@@ -186,10 +199,22 @@
       stop("`weights` must be finite and strictly positive.", call. = FALSE)
   }
 
+  if (anyNA(z)) stop("`z` contains missing values.", call. = FALSE)
   zinfo <- .expand_z(z)
   if (nrow(zinfo$Z) != n) stop("`z` must have n rows.", call. = FALSE)
-  if (!is.null(controls) && NROW(controls) != n)
-    stop("`controls` must have n rows.", call. = FALSE)
+  .assert_finite(zinfo$Z, "z")
+
+  # Covariates: a data frame (possibly with factor columns) is expanded to a
+  # numeric design via model.matrix; a matrix is taken as is.  Rank deficiency
+  # is tolerated downstream by the pivoted residualisation.
+  if (!is.null(controls)) {
+    if (NROW(controls) != n) stop("`controls` must have n rows.", call. = FALSE)
+    if (anyNA(controls)) stop("`controls` contains missing values.", call. = FALSE)
+    controls <- if (is.data.frame(controls))
+      stats::model.matrix(~., data = controls)[, -1L, drop = FALSE]
+    else as.matrix(controls)
+    .assert_finite(controls, "controls")
+  }
 
   cl <- droplevels(as.factor(cluster))
   G <- nlevels(cl)

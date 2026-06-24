@@ -140,4 +140,15 @@ se_w <- sqrt(sum(Sg_w^2) * Gw / (Gw - 1)) / abs(den_w)
 ok(near(fit_w$coefficient, beta_w, 1e-8) && near(fit_w$se, se_w, 1e-8),
    "weighted CJIVE == independent weighted recomputation (1e-8)")
 
+# === Test 8: input validation (clear, specific errors) =====================
+errs <- function(expr) inherits(tryCatch(expr, error = function(e) e), "error")
+ok(errs(cjive(y, x, judge, cluster = rep(1L, n))), "stops on < 2 clusters")
+ok(errs(cjive(y, x, judge, cluster = cl, weights = replace(rep(1, n), 1, -1))),
+   "stops on non-positive weights")
+ok(errs(cjive(y[-1], x, judge, cluster = cl)), "stops on length mismatch")
+ok(errs(cjive(replace(y, 1, NA), x, judge, cluster = cl)), "stops on NA in y")
+ok(errs(cjive(y, x, judge, cluster = replace(cl, 1, NA))), "stops on NA in cluster")
+ok(errs(cjive(y, x, factor(cl), cluster = cl)),
+   "stops when each instrument group lies in a single cluster")
+
 cat("\nAll cjive tests passed.\n")
