@@ -415,12 +415,34 @@ ok(any(grepl("dominating cluster", msgs)), "dominating-cluster advisory fires")
 # the leading quartic coefficient vanishes exactly and the trimmed cubic is
 # the correct object. The inversion must return and match the grid.
 k8 <- fitW$k; wc8 <- fitW$coef_var; crit8 <- fitW$crit
-for (eps in c(3e-7, 0, -3e-7)) {
+for (eps in c(3e-7, -3e-7)) {
   nc8 <- fitW$coef_num
   nc8[3] <- crit8 * sqrt(k8 * wc8[5]) * (1 + eps)
   inv8 <- clusterIV:::.cjar_invert(nc8, wc8, k8, crit8)
   ok(grid_agrees(nc8, wc8, k8, crit8, inv8$conf_set, lo = -20, hi = 20),
      sprintf("degenerate quartic (eps = %g): inversion matches grid", eps))
+}
+# At eps = 0 whether the leading coefficient cancels to exactly zero is
+# platform arithmetic (exact on R 4.3/4.4, a few ulps off on R 4.5), so
+# the exact case and +-1..4 ulp nudges are all checked.  A leading
+# coefficient at roundoff puts the far root near 1/roundoff, where neither
+# this grid nor the inversion is a reference; the check is therefore on
+# the moderate region: grid membership on [-20, 20] and the moderate
+# endpoint against a direct root of h at 1e-10.
+base8 <- crit8 * sqrt(k8 * wc8[5])
+nc8 <- fitW$coef_num
+nc8[3] <- base8
+h8 <- function(b) hpoly(nc8, wc8, k8, crit8, b)
+b8 <- uniroot(h8, c(0.4, 0.6), tol = 1e-14)$root
+bm8 <- seq(-20, 20, length.out = 20001L)
+bm8 <- bm8[abs(bm8 - b8) > 1e-6]
+for (u in -4:4) {
+  nc8[3] <- base8 * (1 + u * .Machine$double.eps / 2)
+  cs8 <- clusterIV:::.cjar_invert(nc8, wc8, k8, crit8)$conf_set
+  fe8 <- cs8[is.finite(cs8) & abs(cs8) <= 20]
+  ok(length(fe8) == 1L && abs(fe8 - b8) < 1e-10 &&
+       all((h8(bm8) <= 0) == vapply(bm8, in_set, logical(1), cs = cs8)),
+     sprintf("degenerate quartic (eps = 0, %+d ulp): moderate region exact", u))
 }
 
 # === Test 9: methods ========================================================

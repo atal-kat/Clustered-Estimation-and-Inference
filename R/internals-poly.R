@@ -132,9 +132,13 @@
     fa <- vals[i]; fb <- vals[i + 1L]
     if (!is.finite(fa) || !is.finite(fb) || fa == 0 || fb == 0 ||
         sign(fa) == sign(fb)) next
+    # zeroin's own stopping rule is 2 * eps * |x| + tol / 2, i.e. relative to
+    # the current iterate.  A tolerance tied to the bracket ends instead
+    # (the former 4 * eps * min(|a|, |b|)) stopped a root near zero early when
+    # a roundoff-sized leading coefficient pushed a derivative root, and so a
+    # bracket end, out to ~1e12.
     rr <- stats::uniroot(function(x) .poly_horner(co, x), c(a, b),
-                         tol = 4 * .Machine$double.eps *
-                           max(1, min(abs(a), abs(b))))$root
+                         tol = .Machine$double.xmin, maxiter = 5000L)$root
     out <- c(out, rr)
   }
   out <- sort(out[is.finite(out)])
