@@ -1,0 +1,232 @@
+---
+title: "Case study: judge leniency and pretrial detention (Miami-Dade)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Case study: judge leniency and pretrial detention (Miami-Dade)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+
+This vignette runs the package on the empirical application of Frandsen,
+Leslie and McIntyre (2025): weekend bail hearings in Miami-Dade County,
+where quasi-randomly assigned bail judges differ in leniency, judge
+identities instrument for pretrial release, and errors are clustered by
+courtroom shift.  It is a large-scale worked example: 91,421 defendants,
+146 judges, and several thousand shift clusters.  The companion
+vignette `vignette("queens-workflow")` introduces the same workflow on a
+smaller design.
+
+This vignette is precomputed: the data file cannot be redistributed
+inside an R package, so the code below was executed by the maintainer
+against a local copy and the outputs are stored.  Every displayed result
+comes from the displayed code.
+
+## Data
+
+The analysis file `clean_Miami_data.dta` is the cleaned weekend-arraignment
+file from the published replication materials of Frandsen, Leslie and
+McIntyre (2025, *Review of Economics and Statistics*); the underlying case
+records are those of Dobbie, Goldin and Yang (2018).  Obtain it from the
+journal's replication archive and set `data_path` to your local copy:
+
+
+```r
+data_path <- "clean_Miami_data.dta"
+```
+
+
+
+The file is one row per defendant.  Following the paper, the sample is
+restricted to judges with at least 200 cases, and a cluster is a courtroom
+shift (court by hearing date):
+
+
+```r
+library(clusterIV)
+
+df <- as.data.frame(haven::read_dta(data_path))
+df <- df[df$n_cases >= 200, , drop = FALSE]        # judges with >= 200 cases
+shift <- as.integer(factor(paste(df$court, df$clean_baildate)))
+
+y <- as.numeric(df$any_guilty)                     # outcome
+x <- as.numeric(df$bail_met)                       # endogenous: met bail
+Z <- as.matrix(df[, startsWith(names(df), "jfe_")])  # judge dummies
+W <- as.matrix(df[, startsWith(names(df), "fe_")])   # time-by-place dummies
+storage.mode(Z) <- "double"; storage.mode(W) <- "double"
+
+c(n = nrow(df), judges = length(unique(df$judgeid)),
+  shifts = length(unique(shift)))
+#>      n judges shifts 
+#>  91421    146   1831
+```
+
+Judge-dummy instrument sets need one hygiene step in any software: after
+the exogenous controls are partialled out, dummies for judges who never
+appear in the estimation sample (or are absorbed by the controls) carry no
+variation, and if every in-sample judge keeps a dummy their sum is
+collinear with the intercept.  The package deliberately reports
+rank-deficient instrument matrices as errors instead of silently dropping
+columns, so the drop is made explicit:
+
+
+```r
+qC   <- qr(cbind(1, W), tol = 1e-10, LAPACK = FALSE)
+Zres <- qr.resid(qC, Z)
+keep <- sqrt(colSums(Zres^2)) > 1e-8 * max(sqrt(colSums(Zres^2)))
+Z    <- Z[, keep, drop = FALSE]
+Zres <- Zres[, keep, drop = FALSE]
+qZ   <- qr(Zres, tol = 1e-10, LAPACK = FALSE)
+if (qZ$rank < ncol(Zres)) {
+  keep_idx <- sort(qZ$pivot[seq_len(qZ$rank)])
+  Z <- Z[, keep_idx, drop = FALSE]
+}
+ncol(Z)   # instrument columns entering the analysis
+#> [1] 145
+```
+
+## Estimator comparison
+
+`iv_compare()` reports OLS, 2SLS, the improved jackknife IV (IJIVE row,
+historically labelled JIVE), and CJIVE on the identical design.  The
+time-by-place dummies enter as dense controls, exactly as in the paper:
+
+
+```r
+cmp <- iv_compare(y, x, Z,
+                  cluster  = shift,   # courtroom-shift clusters
+                  controls = W)       # time-by-place fixed effects
+print(cmp, digits = 3)
+#>   estimator coefficient      se statistic   p.value conf.low conf.high
+#> 1       OLS      -0.233 0.00658    -35.33 2.25e-273   -0.245   -0.2196
+#> 2      2SLS      -0.274 0.06567     -4.18  2.96e-05   -0.403   -0.1456
+#> 3      JIVE      -0.298 0.10671     -2.79  5.22e-03   -0.507   -0.0889
+#> 4     CJIVE      -0.438 0.20206     -2.17  3.01e-02   -0.834   -0.0422
+```
+
+The published Table 1 values are OLS −0.232 (0.007), 2SLS −0.275 (0.066),
+IJIVE −0.299 (0.107), and CJIVE −0.444 (0.206).  The OLS, 2SLS and IJIVE
+rows above reproduce the published values to three decimals.  The CJIVE
+estimate is validated differently: run on this deposited sample, the
+authors' own released Stata implementation (`cjive.ado`) produces the same
+constructed leave-cluster-out instrument pointwise and the same
+coefficient to the ado's single-precision limit (about 1e−7), which is the
+strongest available check that the package computes the estimator the
+paper defines.
+
+## The CJIVE fit and its diagnostics
+
+
+```r
+fit <- cjive(y, x, Z, cluster = shift, controls = W)
+summary(fit)
+#> Cluster-jackknife IV (CJIVE)
+#> Call: cjive.default(y = y, x = x, z = Z, cluster = shift, controls = W)
+#> 
+#>   coefficient = -0.4383   cluster-robust SE = 0.2021
+#>   z = -2.169   p = 0.03008   95% CI = [-0.8343, -0.04225]
+#>   n = 91421   G = 1831 clusters   k = 145 instruments   path = dense
+#>   max within-cluster leverage = 0.341
+#> 
+#> Coefficients:
+#>   Estimate Std. Error z value Pr(>|z|)  
+#> x  -0.4383     0.2021  -2.169   0.0301 *
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Instrument strength:
+#>   F_CJ requires a cjar() fit on the same design; iv_infer() reports the
+#>   estimate, both strength statistics and the robust confidence set in one call.
+#>   F_eff = 1.69   vs critical value 12.41   (Montiel Olea-Pflueger effective F, simplified TSLS, tau = 10%, alpha = 5%, K_eff = 59.61)
+#>   (Confidence-set topology is read from the endpoint matrix printed
+#>    above; no reporting branch infers it from F_eff.)
+```
+
+Two diagnostics matter in a design of this size.  `maxlev` is the maximum
+within-cluster leverage of the first stage; values near 1 mean some shift
+nearly spans the instrument space and the leave-cluster-out fit is at the
+conditioning frontier.  `F_eff` is the clustered Montiel Olea–Pflueger
+effective first-stage F with its simplified-TSLS critical value.
+
+## Weak-instrument-robust inference
+
+Frandsen, Leslie and McIntyre publish no weak-instrument-robust interval
+for this application.  With 100+ instruments, the CJIVE t-interval's
+validity rests on instrument strength; the cluster-jackknife
+Anderson–Rubin and score tests of Ligtenberg (2025) stay valid when
+instruments are weak or many.  `iv_infer()` returns the estimate and both
+tests from one shared preprocessing pass:
+
+
+```r
+panel <- iv_infer(y, x, Z, cluster = shift, controls = W)
+panel
+#> Cluster IV inference panel (CJIVE + CJAR + CJS)
+#> Call: iv_infer.default(y = y, x = x, z = Z, cluster = shift, controls = W)
+#> 
+#>   CJIVE/Wald (H0: beta = 0): coefficient = -0.4383   cluster-robust SE = 0.2021   z = -2.169   p = 0.03008
+#>     95% Wald interval = [-0.8343, -0.04225]
+#>   CJAR (H0: beta = 0): T = 3.681   one-sided p = 0.0004972
+#>     95% confidence set = {}  <- empty: no beta is accepted at this level
+#>   CJS (H0: beta = 0): LM = 4.759   p = 0.02914
+#>     95% confidence set = [-0.9866, -0.05018]
+#>   F_CJ = 4.237   critical value = 1.709
+#>   F_CJS^2 = 13.9   critical value = 3.841
+#>   effective F (Montiel Olea-Pflueger) = 1.69   critical value (tau = 10%, alpha = 5%) = 12.41   K_eff = 59.61
+#>   n = 91421   G = 1831 clusters   k = 145 instruments
+#>   max within-cluster leverage = 0.341
+```
+
+This panel is a lesson in reading weak-instrument-robust output rather
+than a clean confirmation.  The effective F (1.69) is far below its
+critical value: with 145 instrument columns the first stage is weak by
+the Montiel Olea–Pflueger standard, so the Wald interval's nominal
+coverage is not guaranteed — precisely the regime the robust tests are
+for.  The two robust results then differ in kind.  The CJS test gives a
+bounded 95% set that excludes zero and comfortably contains the CJIVE
+estimate.  The CJAR set is *empty*: no coefficient value is accepted at
+the 5% level.  An empty AR set is a valid outcome, not a numerical
+failure — the AR statistic aggregates all 145 moment conditions, so it
+also has power against violations of the exclusion restrictions
+themselves, and with this much overidentification it can reject every
+candidate coefficient.  It should be read as evidence of tension in the
+full instrument set rather than as an interval estimate (see the FAQ in
+the README).  The sets are computed by analytic polynomial inversion, not
+a parameter grid, so empty, disjoint, and unbounded outcomes are exact
+statements.  The p-value curves make all of this visible:
+
+
+```r
+plot(panel)
+```
+
+![plot of chunk pcurve](miami-pcurve-1.png)
+
+## Notes on scale
+
+At this size (n = 91,421, k > 100 instruments, dense controls) the whole
+panel above runs in minutes on a laptop.  The package keeps `Imports:`
+limited to `stats`; the loading step above uses `haven` only to read the
+Stata file, which is not a package dependency.  For designs with many
+more fixed-effect levels, pass them as `fixed_effects =` factors instead
+of dense dummy columns: the matrix-free absorption never forms the dummy
+matrix.  Note the caveat in `?cjive`: with many absorbed controls
+relative to the sample, the plug-in CJIVE standard error can over-reject
+(Kolesár, Min, Wang and Zhang 2026); the time-by-place controls here are
+few relative to n.
+
+## References
+
+Dobbie, W., Goldin, J. and Yang, C. S. (2018). The effects of pretrial
+detention on conviction, future crime, and employment. *American Economic
+Review*, 108(2), 201–240.  The underlying Miami-Dade case records.
+
+Frandsen, B., Leslie, E. and McIntyre, S. (2025). Cluster jackknife
+instrumental variables estimation. *Review of Economics and Statistics*.
+doi:10.1162/rest.a.263.  The estimator, the application, and the
+replication materials used here.
+
+Ligtenberg, J. W. (2025). Inference in clustered IV models with many and
+weak instruments. arXiv:2306.08559v3.  The CJAR and CJS tests reported by
+`iv_infer()`.

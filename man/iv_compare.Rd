@@ -2,9 +2,13 @@
 % Please edit documentation in R/iv_compare.R
 \name{iv_compare}
 \alias{iv_compare}
-\title{Compare IV estimators on a common cluster-robust SE (FLM Table 1)}
+\alias{iv_compare.default}
+\alias{iv_compare.formula}
+\title{Compare IV estimators on a common cluster-robust standard error}
 \usage{
-iv_compare(
+iv_compare(y, ...)
+
+\method{iv_compare}{default}(
   y,
   x,
   z,
@@ -12,45 +16,140 @@ iv_compare(
   controls = NULL,
   weights = NULL,
   level = 0.95,
-  intercept = TRUE
+  intercept = TRUE,
+  fixed_effects = NULL,
+  inference = c("asymptotic", "t"),
+  ...
+)
+
+\method{iv_compare}{formula}(
+  formula,
+  data,
+  cluster,
+  controls = NULL,
+  weights = NULL,
+  level = 0.95,
+  intercept = TRUE,
+  fixed_effects = NULL,
+  inference = c("asymptotic", "t"),
+  subset,
+  na.action = stats::na.omit,
+  ...
 )
 }
 \arguments{
-\item{y}{Outcome (numeric vector).}
+\item{y}{Outcome (numeric vector); factor and character outcomes are
+rejected.  A formula as the first argument selects the formula method.}
 
-\item{x}{Single endogenous regressor (numeric vector).}
+\item{...}{Must be empty.  Unknown, misspelled and unnamed arguments are
+errors.}
 
-\item{z}{Instruments (numeric matrix/vector or a grouping factor).}
+\item{x}{Single endogenous regressor (numeric vector); factor and character
+regressors are rejected.}
 
-\item{cluster}{Cluster identifiers (length n).  For the formula method a
-one-sided formula (\code{~ g}) or a column name is also accepted.}
+\item{z}{Instruments (numeric matrix/vector or a grouping factor).  A factor
+uses reference coding with an intercept or absorbed fixed effects, and all
+levels only when neither is present.}
+
+\item{cluster}{Cluster identifiers (length n).  In the formula methods all
+four forms work: a bare column name (\code{cluster = cl}), a one-sided
+formula (\code{cluster = ~cl}), a column name as a string
+(\code{cluster = "cl"}), or a full vector (\code{cluster = df$cl});
+a bare name is looked up in \code{data} first, then in the caller.  A
+cluster formula must contain exactly one bare variable; multiway cluster
+formulas and arithmetic combinations of cluster codes are not supported.}
 
 \item{controls}{Optional covariates (FLM's \eqn{X}): a matrix or data frame,
-or a one-sided formula in the formula method.  May be rank deficient (fixed
+or a one-sided formula in the formula methods.  May be rank deficient (fixed
 effects are allowed).  An intercept is added unless \code{intercept = FALSE}.}
 
-\item{weights}{Optional strictly positive precision weights.}
+\item{weights}{Optional numeric precision weights.  Values must be finite
+and strictly positive; factor and character weights are rejected.  In
+the formula methods the same four forms as \code{cluster} work, including
+a bare data-frame column name.}
 
-\item{level}{Confidence level for the reported interval.}
+\item{level}{Confidence level for the reported interval: one finite numeric
+value strictly between 0 and 1.}
 
-\item{intercept}{Logical; partial out an intercept (default \code{TRUE}).}
+\item{intercept}{One non-missing logical value; partial out an intercept
+(default \code{TRUE}).}
+
+\item{fixed_effects}{Optional high-dimensional fixed effects to absorb: a
+factor, or a list/data frame of factors (one per dimension).  In the
+formula methods they can also enter through either formula layout
+or as a one-sided formula (\code{fixed_effects = ~ fe1 + fe2}).  Absorbed
+by a matrix-free, \code{rowsum}-based joint projection before the dense
+partialling out; numerically identical (to tolerance) to entering the
+corresponding dummies via \code{controls}, but without forming any dummy
+matrix.  Absorption spans the intercept within groups, and a result is
+returned only after normalized refinement and per-dimension weighted
+orthogonality checks pass.}
+
+\item{inference}{Critical values and p-values: \code{"asymptotic"} (standard
+normal, the default) or \code{"t"} (Student t with \eqn{G-1} degrees of
+freedom, a small-cluster reference convention in common use; it is not
+an exact finite-sample t law under arbitrary within-cluster
+dependence).  The coefficient and
+standard error are identical under both; only the interval and p-value
+change.}
+
+\item{formula}{One of the two restricted formula layouts documented in
+\code{\link{cjive}}.  Sections accept only additive lists of bare variable
+names, with exactly one outcome and one endogenous regressor; \code{0} or
+\code{-1} removes the intercept, while other arithmetic and subtraction
+are rejected.}
+
+\item{data}{A data frame in which to evaluate the formula.}
+
+\item{subset}{Optional expression selecting the rows to use, evaluated in
+\code{data} (formula methods only), as in \code{\link[stats]{lm}}.}
+
+\item{na.action}{How to treat missing values (formula method only):
+\code{\link[stats]{na.omit}} (the default) drops every row with a missing
+value in any model component -- outcome, endogenous regressor,
+instruments, controls, fixed effects, cluster or weights -- in a single
+complete-cases filter; \code{na.fail} stops on any missing value;
+\code{na.pass} leaves them in, so the input validation reports them.
+Unlike the fitted-object interfaces, \code{iv_compare} returns a plain
+data frame and does not store or report the number of dropped rows.  The
+default method (vector interface) does not handle missing values at all:
+it requires clean input and stops otherwise.}
 }
 \value{
 A data frame with one row per estimator (in the order OLS, 2SLS,
-JIVE, CJIVE) and columns \code{estimator}, \code{coefficient}, \code{se},
-\code{statistic}, \code{p.value}, \code{conf.low}, \code{conf.high}.
+  JIVE, CJIVE) and columns \code{estimator}, \code{coefficient}, \code{se},
+  \code{statistic}, \code{p.value}, \code{conf.low}, \code{conf.high}.
 }
 \description{
-Returns OLS, 2SLS, JIVE and CJIVE for the same design, each reported with the
-\emph{identical} just-identified cluster-robust IV sandwich standard error;
-only the constructed instrument differs between rows.  This reproduces the
-shape of Table 1 in Frandsen, Leslie and McIntyre (2025).
+Returns OLS, 2SLS, JIVE and CJIVE for the same design, each reported with
+the same cluster-robust IV sandwich standard-error convention, computed
+from that row's single constructed instrument;
+only the constructed instrument differs between rows.  The four-row layout
+follows Table 1 in Frandsen, Leslie and McIntyre (2025); the function does
+not replicate that table's empirical estimates.
 }
 \details{
 The constructed instruments are: OLS, the residualised \eqn{x}
-itself; 2SLS, the full-sample fit \eqn{Z\hat\pi}; JIVE, the leave-one-out
-fit \eqn{(\hat x - h x)/(1 - h)}; CJIVE, the leave-cluster-out block fit.
-The CJIVE row equals \code{cjive(..., method = "dense")} on the same design.
+  itself; 2SLS, the full-sample fit \eqn{Z\hat\pi}; JIVE, the leave-one-out
+  fit \eqn{(\hat x - h x)/(1 - h)}; CJIVE, the leave-cluster-out block fit.
+  The CJIVE row equals \code{cjive(..., method = "dense")} on the same design.
+  Weighting and residualisation precede validation: transformed values must
+  be finite, \code{y}, \code{x} and each instrument must retain usable
+  variation, and the residualised instrument matrix must have full numerical
+  column rank.  Absorbed or collinear instruments are not silently dropped;
+  a numerically zero estimator denominator is rejected before division.
+
+  Because covariates (and the intercept) are partialled out by
+  Frisch-Waugh-Lovell before the jackknife -- the package-wide convention --
+  the leverage \eqn{h} and the fit \eqn{\hat x} in the \code{"JIVE"} row are
+  computed on the \emph{residualised} instruments.  This is the improved
+  JIVE (IJIVE) of Ackerberg and Devereux (2009), not the original JIVE of
+  Angrist, Imbens and Krueger (1999), which jackknifes the covariates
+  alongside the instruments; residualising first removes the
+  covariate-count bias that the original estimator carries, and the two
+  coincide only when there are no covariates to partial out.  The row keeps
+  the historical label \code{"JIVE"} for backwards compatibility with
+  clusterIV 0.1.0; FLM label the corresponding estimator IJIVE.
 }
 \examples{
 set.seed(2)
@@ -64,6 +163,22 @@ iv_compare(y, x, z, cluster = cl)
 
 }
 \references{
+Ackerberg, D. A. and Devereux, P. J. (2009). Improved JIVE estimators for
+overidentified linear models with and without heteroskedasticity.
+\emph{Review of Economics and Statistics}, 91(2), 351--362.  The
+partial-out-then-jackknife construction of the \code{"JIVE"} row.
+
+Angrist, J. D., Imbens, G. W. and Krueger, A. B. (1999). Jackknife
+instrumental variables estimation. \emph{Journal of Applied Econometrics},
+14(1), 57--67.  The original JIVE that IJIVE improves upon.
+
 Frandsen, B., Leslie, E. and McIntyre, S. (2025). Cluster Jackknife
 Instrumental Variables Estimation. \emph{Review of Economics and Statistics}.
+}
+\seealso{
+\code{\link{cjive}} for the CJIVE fit with diagnostics;
+  \code{\link{iv_infer}} for the recommended inference workflow.  Two
+  precomputed worked examples on real data:
+  \code{vignette("queens-workflow", package = "clusterIV")} and
+  \code{vignette("miami-bail", package = "clusterIV")}.
 }

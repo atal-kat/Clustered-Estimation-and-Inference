@@ -1,0 +1,332 @@
+---
+title: "Getting started: clustered IV with weak-instrument-robust inference (the queens data)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started: clustered IV with weak-instrument-robust inference (the queens data)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+
+This vignette walks through the package's workflow on a real, named
+dataset: Dube and Harish (2020) ask whether states ruled by queens fought
+more wars than states ruled by kings, instrumenting queenly rule with the
+gender composition of the previous ruler's family.  The design has
+everything this package is for: a binary endogenous regressor, multiple
+excluded instruments that are not strong, a moderate number of clusters
+(176 reign spells), and a covariate block that mixes dense controls with
+several fixed-effect dimensions.
+
+The vignette is precomputed: the panel cannot be redistributed inside an
+R package, so the code was executed by the maintainer against a local
+copy and the outputs are stored.  Every displayed result comes from the
+displayed code.
+
+## Data
+
+The analysis file is the main panel from the replication materials of
+Dube and Harish (2020, *Journal of Political Economy*): one row per
+polity-year, 3,586 rows and 778 columns.  Set `data_path` to your local
+copy; the hashes let you confirm you hold the same file:
+
+
+```r
+data_path <- "queens_main_panel.dta"
+```
+
+
+
+
+```r
+library(clusterIV)
+
+d <- as.data.frame(haven::read_dta(data_path))
+dim(d)
+#> [1] 3586  778
+unname(tools::md5sum(data_path))
+#> [1] "29d55f9aeac21a33d09c92bc279e829e"
+```
+
+The roles in the baseline specification (Dube and Harish, Table A.5,
+column 1):
+
+- outcome `anypartBDICTC` — the polity participates in a war in that year;
+- endogenous regressor `queen2` — a queen rules;
+- excluded instruments `fb` (first-born child is male) and `femsib2`
+  (previous ruler had a sister);
+- clusters `inv1_clust_broadgreign_id` — 176 broad reign spells, the level
+  at which assignment varies;
+- dense controls `fbmg`, `mgsib2`, `inv1_any_NMBlc_hw`,
+  `inv1_any_MBlc_hw`, `inv1_gunrel` (the family-composition and
+  gun-related controls of the published specification);
+- three fixed-effect dimensions: sibling count, decade, and polity.
+
+It is an unweighted linear-probability IV model.  The fixed-effect
+factors are built once:
+
+
+```r
+d$sibling_fe <- factor(d$totsib2)
+d$decade_fe  <- factor(d$decade_indicator)
+d$polity_fe  <- factor(d$kingdom_id)
+c(G = length(unique(d$inv1_clust_broadgreign_id)),
+  fe_levels = nlevels(d$sibling_fe) + nlevels(d$decade_fe) +
+    nlevels(d$polity_fe))
+#>         G fe_levels 
+#>       176        79
+```
+
+## One call: `iv_infer()`
+
+`iv_infer()` is the recommended entry point.  It returns the CJIVE point
+estimate, the cluster-jackknife Anderson–Rubin (CJAR) confidence set, and
+the cluster-jackknife score (CJS) test in one panel, sharing all the
+expensive preprocessing:
+
+
+```r
+panel <- iv_infer(
+  anypartBDICTC ~ queen2 | fb + femsib2 |          # y ~ x | z | fe
+    sibling_fe + decade_fe + polity_fe,
+  data        = d,
+  cluster     = ~ inv1_clust_broadgreign_id,       # 176 reign clusters
+  controls    = ~ fbmg + mgsib2 + inv1_any_NMBlc_hw +
+    inv1_any_MBlc_hw + inv1_gunrel,                # dense controls
+  beta0       = 0,                                 # tested point null
+  level       = 0.95,                              # set level
+  calibration = "chisq",                           # CJAR critical value (default)
+  variance    = "plain"                            # jackknife variance (default)
+)
+panel
+#> Cluster IV inference panel (CJIVE + CJAR + CJS)
+#> Call: iv_infer.formula(formula = anypartBDICTC ~ queen2 | fb + femsib2 |      sibling_fe + decade_fe + polity_fe, data = d, cluster = ~inv1_clust_broadgreign_id,      controls = ~fbmg + mgsib2 + inv1_any_NMBlc_hw + inv1_any_MBlc_hw +          inv1_gunrel, level = 0.95, beta0 = 0, calibration = "chisq",      variance = "plain")
+#> 
+#>   CJIVE/Wald (H0: beta = 0): coefficient = 0.4134   cluster-robust SE = 0.1623   z = 2.546   p = 0.01089
+#>     95% Wald interval = [0.09517, 0.7316]
+#>   CJAR (H0: beta = 0): T = 3.737   one-sided p = 0.008761
+#>     95% confidence set = [0.135, 0.8381]
+#>   CJS (H0: beta = 0): LM = 5.778   p = 0.01623
+#>     95% confidence set = [0.09477, 0.8839]
+#>   F_CJ = 7.756   critical value = 1.996
+#>   F_CJS^2 = 12.08   critical value = 3.841
+#>   effective F (Montiel Olea-Pflueger) = 10.68   critical value (tau = 10%, alpha = 5%) = 19.53   K_eff = 1.899
+#>   n = 3586   G = 176 clusters   k = 2 instruments
+#>   max within-cluster leverage = 0.0774
+#>   absorbed fixed effects: 3 dimension(s), 79 levels   raw nuisance count/n = 0.02287
+```
+
+How to read this panel:
+
+- The **CJIVE row** is the point estimate with its cluster-robust Wald
+  interval — report it for magnitude.
+- The **CJAR set** stays valid when instruments are weak or many; when it
+  disagrees with the Wald interval, trust the CJAR set.
+- The **CJS line** tests the specific null `beta0`; its power profile
+  complements CJAR's.
+- `F_eff` is the clustered effective first-stage F of Montiel Olea and
+  Pflueger, with its simplified-TSLS critical value.  Here it is *below*
+  that critical value: the instruments are not strong, which is exactly
+  the situation the CJAR/CJS sets are for.  `F_CJ` plays the same role
+  for the CJAR set itself — it is above its critical value precisely when
+  the CJAR set is bounded.
+- `maxlev` is the maximum within-cluster leverage; small values (here
+  about 0.08) mean no single reign spell dominates the first stage.
+
+The components are ordinary fitted objects:
+
+
+```r
+coef(panel$cjive)
+#>    queen2 
+#> 0.4133645
+confint(panel$cjar)
+#>         lower     upper
+#> [1,] 0.135045 0.8381354
+plot(panel)
+```
+
+![plot of chunk pcurve](queens-pcurve-1.png)
+
+## Comparing estimators
+
+`iv_compare()` reports OLS, 2SLS, the improved jackknife IV (IJIVE row,
+historically labelled JIVE), and CJIVE on the identical design.  The
+published 2SLS coefficient for this specification is 0.388:
+
+
+```r
+W <- model.matrix(~ fbmg + mgsib2 + inv1_any_NMBlc_hw + inv1_any_MBlc_hw +
+                    inv1_gunrel + sibling_fe + decade_fe + polity_fe,
+                  data = d)[, -1L, drop = FALSE]
+cmp <- iv_compare(d$anypartBDICTC, d$queen2,
+                  z = data.matrix(d[, c("fb", "femsib2")]),
+                  cluster  = d$inv1_clust_broadgreign_id,
+                  controls = W)
+print(cmp, digits = 3)
+#>   estimator coefficient     se statistic  p.value conf.low conf.high
+#> 1       OLS       0.130 0.0365      3.57 0.000362   0.0587     0.202
+#> 2      2SLS       0.388 0.1449      2.68 0.007405   0.1040     0.672
+#> 3      JIVE       0.389 0.1458      2.67 0.007556   0.1037     0.675
+#> 4     CJIVE       0.413 0.1623      2.55 0.010891   0.0952     0.732
+```
+
+Two remarks.  First, the OLS coefficient (0.13) is far below every IV
+estimate — the published paper's point.  Second, passing the fixed
+effects as dense `model.matrix` columns, as here, is numerically
+identical to absorbing them via `fixed_effects =`; the absorption route
+never forms the dummy matrix and is the one that scales.
+
+A note on cross-software comparison: Stata's `weakivtest` multiplies the
+effective F by a finite-sample factor `G/(G-1) * (n-1)/(n-L)`.  The
+package reports the unfactored statistic, so the panel's `F_eff` of
+10.678 corresponds to the published 10.372.
+
+## The published specification set
+
+Table A.5 of Dube and Harish varies the instrument set (columns 1, 2, 4
+and 5), and Ligtenberg (2025) adds a pooled specification using all five
+instruments.  The loop below runs all five with the package, collecting
+the 2SLS anchor, the CJAR and CJS confidence sets, and the diagnostics:
+
+
+```r
+specs <- list(
+  `A.5 col 1 (FBM, Sis)` = list(
+    z = c("fb", "femsib2"),
+    ctrl = c("fbmg", "mgsib2", "inv1_any_NMBlc_hw", "inv1_any_MBlc_hw",
+             "inv1_gunrel")),
+  `A.5 col 2 (+ Sis x No children)` = list(
+    z = c("fb", "femsib2", "femsib2xnolc"),
+    ctrl = c("fbmg", "mgsib2", "mgsib2xnolc", "inv1_any_NO_lc_hw",
+             "inv1_gunrel")),
+  `A.5 col 4 (+ Sis x FBM)` = list(
+    z = c("fb", "femsib2", "femsib2xfb"),
+    ctrl = c("fbmg", "mgsib2", "inv1_any_NMBlc_hw", "inv1_any_MBlc_hw",
+             "inv1_gunrel")),
+  `A.5 col 5 (+ FBM x Two children)` = list(
+    z = c("fb", "fbxtwolc", "femsib2"),
+    ctrl = c("fbmg", "fbmgxtwolc", "mgsib2", "inv1_two_lc_hw",
+             "inv1_any_NMBlc_hw", "inv1_any_MBlc_hw", "inv1_gunrel")),
+  `Pooled (all five instruments)` = list(
+    z = c("fb", "femsib2", "femsib2xnolc", "femsib2xfb", "fbxtwolc"),
+    ctrl = c("fbmg", "mgsib2", "mgsib2xnolc", "fbmgxtwolc",
+             "inv1_any_NO_lc_hw", "inv1_two_lc_hw", "inv1_any_NMBlc_hw",
+             "inv1_any_MBlc_hw", "inv1_gunrel"))
+)
+
+fmt_set <- function(cs) {
+  if (nrow(cs) == 0L) return("(empty)")
+  paste(apply(cs, 1L, function(z) sprintf("[%.3f, %.3f]", z[1L], z[2L])),
+        collapse = " U ")
+}
+
+rows <- lapply(names(specs), function(nm) {
+  s <- specs[[nm]]
+  Ws <- model.matrix(
+    stats::reformulate(c(s$ctrl, "sibling_fe", "decade_fe", "polity_fe")),
+    data = d)[, -1L, drop = FALSE]
+  z  <- data.matrix(d[, s$z])
+  cmp <- iv_compare(d$anypartBDICTC, d$queen2, z,
+                    cluster = d$inv1_clust_broadgreign_id, controls = Ws)
+  ar <- cjar(d$anypartBDICTC, d$queen2, z,
+             cluster = d$inv1_clust_broadgreign_id, controls = Ws)
+  sc <- cjscore(d$anypartBDICTC, d$queen2, z,
+                cluster = d$inv1_clust_broadgreign_id, controls = Ws)
+  data.frame(spec = nm, k = ar$k,
+             `2SLS` = cmp$coefficient[cmp$estimator == "2SLS"],
+             CJIVE = cmp$coefficient[cmp$estimator == "CJIVE"],
+             `CJAR 95% set` = fmt_set(ar$conf_set),
+             `CJS 95% set` = fmt_set(sc$conf_set),
+             F_CJ = round(ar$F_CJ, 2),
+             check.names = FALSE)
+})
+tab <- do.call(rbind, rows)
+print(tab, row.names = FALSE, digits = 3)
+#>                              spec k  2SLS CJIVE   CJAR 95% set    CJS 95% set F_CJ
+#>              A.5 col 1 (FBM, Sis) 2 0.388 0.413 [0.135, 0.838] [0.095, 0.884] 7.76
+#>   A.5 col 2 (+ Sis x No children) 3 0.313 0.335 [0.241, 0.537] [0.087, 0.701] 8.33
+#>           A.5 col 4 (+ Sis x FBM) 3 0.288 0.311 [0.133, 0.592] [0.008, 0.680] 7.29
+#>  A.5 col 5 (+ FBM x Two children) 3 0.313 0.338 [0.086, 0.797] [0.092, 0.865] 5.66
+#>     Pooled (all five instruments) 5 0.226 0.241 [0.037, 0.518] [0.032, 0.535] 7.08
+```
+
+The four A.5 rows reproduce the published 2SLS coefficients (0.388,
+0.313, 0.288, 0.313) to three decimals; the CJIVE estimates and the
+CJAR/CJS confidence sets are the package's own output, computed by exact
+polynomial inversion rather than a parameter grid.
+
+## Exporting results
+
+`tidy()` and `glance()` methods (registered through the optional
+`generics` package) return plain data frames, one row per inferential
+procedure, so results flow into `knitr::kable()`, `modelsummary`, or any
+LaTeX pipeline:
+
+
+```r
+library(generics)   # provides the tidy() / glance() generics
+#> 
+#> Attaching package: 'generics'
+#> The following objects are masked from 'package:base':
+#> 
+#>     as.difftime, as.factor, as.ordered, intersect, is.element, setdiff,
+#>     setequal, union
+td <- tidy(panel)
+td[, c("procedure", "estimate", "std.error", "statistic", "p.value",
+       "conf.low", "conf.high", "shape")]
+#>                          procedure  estimate std.error statistic     p.value   conf.low
+#> 1                       CJIVE/Wald 0.4133645  0.162348  2.546163 0.010891440 0.09516822
+#> 2 cluster jackknife Anderson-Rubin        NA        NA  3.737397 0.008761418 0.13504496
+#> 3          cluster jackknife score        NA        NA  5.777926 0.016228678 0.09477295
+#>   conf.high   shape
+#> 1 0.7315609 bounded
+#> 2 0.8381354 bounded
+#> 3 0.8839396 bounded
+```
+
+A confidence set that is disjoint or unbounded cannot be flattened into
+two numbers; the full endpoint matrix always sits in the `conf.set`
+list-column, and `shape` says what kind of set each row carries.  For a
+LaTeX table:
+
+
+```r
+knitr::kable(td[, c("procedure", "estimate", "std.error", "conf.low",
+                    "conf.high")],
+             format = "latex", digits = 3, booktabs = TRUE)
+```
+
+## Caveats worth knowing here
+
+- The baseline absorbs 79 fixed-effect levels and 5 dense controls in a
+  sample of 3,586 — a raw nuisance share of about 2.3%, comfortably in
+  the regime the theory covers.  With *many* controls relative to the
+  sample, the plug-in CJIVE standard error can over-reject (Kolesár, Min,
+  Wang and Zhang 2026); see the FAQ in `?cjar`.
+- The decade/polity/sibling effects here are generic controls, not
+  cluster-specific ones; a small number of them partialled out ex ante is
+  asymptotically negligible for the CJAR/CJS theory (Ligtenberg 2025,
+  Section 5.3).
+- This vignette applies the package's independently validated formulas to
+  the published specifications; it is a worked application, not a claimed
+  replication of any table beyond the 2SLS/first-stage anchors quoted
+  above.
+
+## References
+
+Dube, O. and Harish, S. P. (2020). Queens. *Journal of Political
+Economy*, 128(7), 2579–2652.  The data and the published 2SLS
+specifications (Table A.5).
+
+Ligtenberg, J. W. (2025). Inference in clustered IV models with many and
+weak instruments. arXiv:2306.08559v3.  The CJAR and CJS tests and the
+pooled specification.
+
+Frandsen, B., Leslie, E. and McIntyre, S. (2025). Cluster jackknife
+instrumental variables estimation. *Review of Economics and Statistics*.
+doi:10.1162/rest.a.263.  The CJIVE estimator.
+
+Montiel Olea, J. L. and Pflueger, C. (2013). A robust test for weak
+instruments. *Journal of Business & Economic Statistics*, 31(3),
+358–369.  The effective first-stage F reported as `F_eff`.

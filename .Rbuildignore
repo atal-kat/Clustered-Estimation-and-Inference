@@ -1,6 +1,16 @@
 ^cran-comments\.md$
 ^\.github$
 ^\.git$
+^\.gitignore$
 ^\.claude$
+^CLAUDE\.md$
+^AGENTS\.md$
+^claude-code-v020-spec\.md$
+^VALIDATION\.md$
+^dev$
+(^|/)\.DS_Store$
+^Rplots\.pdf$
+^.*\.log$
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^vignettes/.*\.Rmd\.orig$

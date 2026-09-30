@@ -4,4 +4,20 @@
 .Rhistory
 .RData
 .Rproj.user/
+*.Rproj
+Rplots.pdf
+*.log
+.DS_Store
+
+# Internal: assistant configuration and notes (never published)
 .claude/
+CLAUDE.md
+AGENTS.md
+claude-code-v020-spec.md
+
+# Internal: development material, oracles, replication data, planning notes
+/dev/
+VALIDATION.md
+cran-comments.md
+# Vignette knitting sources (read data from dev/replication; outputs are precomputed)
+vignettes/*.Rmd.orig
