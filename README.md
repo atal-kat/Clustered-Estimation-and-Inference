@@ -1,5 +1,11 @@
 # clusterIV
 
+<!-- badges: start -->
+[![CRAN status](https://www.r-pkg.org/badges/version/clusterIV)](https://CRAN.R-project.org/package=clusterIV)
+[![R-CMD-check](https://github.com/atal-kat/Clustered-Estimation-and-Inference/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/atal-kat/Clustered-Estimation-and-Inference/actions/workflows/R-CMD-check.yaml)
+[![CRAN downloads](https://cranlogs.r-pkg.org/badges/grand-total/clusterIV)](https://CRAN.R-project.org/package=clusterIV)
+<!-- badges: end -->
+
 Clustered instrumental variables estimation and weak-instrument-robust
 inference for R.
 
